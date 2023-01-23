@@ -1,0 +1,315 @@
+import time
+from MyWinApi import MyWinApi
+import win32con
+import pyHook
+
+
+
+class Stukov():
+	def __init__(self, screen_dimensions, debug=True):
+		self._debug = debug
+
+		self._num_workers = 12
+		self._gas1 = None
+		self._gas1_loc = ()
+		self._gas2 = None
+		self._gas2_loc = ()
+		self._spawn_location = None
+
+		self._initial_setup_done = False
+
+		self._thrasher1_active = True
+		self._thrasher2_active = False
+		self._thrasher3_active = False
+		self._thrasher4_active = False
+		self._thrasher1_loc = (152, 929)
+		self._thrasher2_loc = (115, 835)
+		self._thrasher3_loc = (250, 970)
+		self._thrasher4_loc = (215, 870)
+
+		self._barracks_alive = False
+		self._overlord_positioned = False
+
+		self._hotkeys = {'command_center': '4',
+							'barracks': '2'}
+
+		self._saidGG = False
+
+		self._left_mineral = (580,772)
+		self._right_mineral = (998,775)
+
+
+	def get_actions(self, screen_state, game_time) -> list:
+		self._print("T",game_time)
+		self._actions = []
+		
+		
+		self._spawn_location='L'
+		self.build_left_gas()
+		return self._actions
+		
+		
+		if game_time < 5:
+			self.sayGG()
+		
+		self.set_spawn_location(screen_state, game_time)
+
+		self.setup_initial_base()
+	
+		if game_time < 50:
+			self.make_overlord_and_worker(game_time)
+	
+		if game_time < 65 and game_time > 60:
+			self.build_barracks()
+
+		if game_time < 73 and game_time > 70:
+			self.rally_overlords()
+			self.make_a_worker()
+
+	
+		return list(self._actions)
+
+
+
+	def build_barracks(self):
+		if not hasattr(self, 'builtbarracks'):
+			self.select_worker()
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.press_key("b")')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.press_key("b")')
+			if self._spawn_location == 'R':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(221,665))
+			elif self._spawn_location == 'L':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(470,54))
+			self._actions.append('self._window.left_click()')
+			
+			# Back to mineral
+			if self._spawn_location == 'L':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(self._left_mineral[0],self._left_mineral[1]))
+			elif self._spawn_location == 'R':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(self._right_mineral[0],self._right_mineral[1]))
+			self._actions.append('self._window.key_down("SHIFT")')
+			self._actions.append('self._window.right_click()')
+			self._actions.append('self._window.key_up("SHIFT")')
+			self.builtbarracks = True
+			
+	def hotkey_barracks(self):
+		self._actions.append('time.sleep(3)')
+		if self._spawn_location == 'R':
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(221,665))
+		elif self._spawn_location == 'L':
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(457,125))
+		self._actions.append('self._window.left_click()')
+		self._actions.append('time.sleep(.1)')
+		self.hotkey('2')
+
+	def build_engi_bay(self):
+		pass
+
+	def sayGG(self):
+		if not hasattr(self, 'alreadysaidgg'):
+			self._actions.append('self._window.press_key("ENTER")')
+			self._actions.append('self._window.press_key("g")')
+			self._actions.append('self._window.press_key("l")')
+			self._actions.append('self._window.press_key("h")')
+			self._actions.append('self._window.press_key("f")')
+			self._actions.append('self._window.press_key("ENTER")')
+			self.alreadysaidgg = True
+		
+	def set_spawn_location(self, screen_state, game_time) -> list:
+		if self._spawn_location == None:
+			left_loc = screen_state[:,85,970]
+			left_spawn = left_loc[0] == 0 and left_loc[1] != 0 and left_loc[2] == 0
+			right_loc = screen_state[:,110,995]
+			right_spawn = right_loc[0] == 0 and right_loc[1] != 0 and right_loc[2] == 0
+			if left_spawn:
+				self._spawn_location = 'L'
+				self._print("G","Spawned left")
+				self._actions.append('self._window.set_cursor_pos(1097, 405)')
+
+			elif right_spawn:
+				self._spawn_location = 'R'
+				self._print("G","Spawned right")
+				self._actions.append('self._window.set_cursor_pos(1000, 300)')
+				
+			self._actions.append('self._window.left_click()')
+			self.hotkey('4')
+			
+			self._actions.append('time.sleep(.5)')
+			# Hotkey colony
+			if self._spawn_location == 'L':
+				self.box((1388,142),(1776,481))
+			elif self._spawn_location == 'R':
+				self.box((1700,200),(960,20))
+			self.hotkey('3')
+				
+			# Hotkey all meaningful locations
+			self._actions.append('time.sleep(1)')
+			self._actions.append('self._window.press_key("4")')
+			self._actions.append('self._window.press_key("4")')
+			self._actions.append('self._window.press_key("4")')
+			self._actions.append('self._window.press_key("4")')
+			self.hotkey('w')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(115, 968))
+			self._actions.append('self._window.left_click()')
+			self.hotkey('e')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(102,901))
+			self._actions.append('self._window.left_click()')
+			self.hotkey('r')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(180,987))
+			self._actions.append('self._window.left_click()')
+			self.hotkey('t')
+			self._actions.append('time.sleep(.1)')
+			
+			
+			self._actions.append('self._window.press_key("w")')
+			
+			# Make a worker
+			self._actions.append("self._window.press_key('4')")
+			self._actions.append("time.sleep(.3)")
+			self._actions.append("self._window.press_key('s')")
+
+			# Set rally to thrasher1
+			self._actions.append('self._window.press_key("3")')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(self._thrasher1_loc[0],self._thrasher1_loc[1]))
+			self._actions.append('self._window.right_click()')
+			
+	def setup_initial_base(self):
+		if not self._initial_setup_done:
+			self._print("G","Running initial base setup...")
+			self._actions.append('self._window.press_key("4")')
+			self._actions.append('time.sleep(3)')
+			self._actions.append('self._window.press_key("s")')
+			self._actions.append('time.sleep(5)')
+			self._actions.append('self._window.press_key("v")')
+			
+			self._initial_setup_done = True
+
+	
+	def make_overlord_and_worker(self, gametime):
+		if self._actions == []:
+			self._actions.append('self._window.press_key("4")')
+			self._actions.append('self._window.press_key("s")')
+			self._actions.append('self._window.press_key("s")')
+			self._actions.append('self._window.press_key("s")')
+			self._actions.append('self._window.press_key("v")')
+	
+	def select_worker(self):
+		if self._spawn_location == 'L':
+			self.box((407,86),(997,863))
+		elif self._spawn_location == 'R':
+			self.box((379,394),(1094,809))
+		self._actions.append('self._window.set_cursor_pos({},{})'.format(986,983))
+		self._actions.append('time.sleep(.1)')
+		self._actions.append('self._window.left_click()')
+	
+	def box(self, x1_y1, x2_y2):
+		self._actions.append('self._window.set_cursor_pos({},{})'.format(x1_y1[0],x1_y1[1]))
+		self._actions.append('self._window.left_click_down()')
+		self._actions.append('self._window.set_cursor_pos({},{})'.format(x2_y2[0],x2_y2[1]))
+		self._actions.append('self._window.left_click_up()')
+	
+	def hotkey(self, hotkey):
+		self._actions.append('self._window.key_down("CTRL")')
+		self._actions.append('self._window.key_down("{}")'.format(hotkey))
+		self._actions.append('self._window.key_up("CTRL")')
+		self._actions.append('self._window.key_up("{}")'.format(hotkey))			
+		
+	def build_left_gas(self):
+		if not hasattr(self, 'built_left_gas'):
+			self.select_worker()
+			self._actions.append('self._window.press_key("b")')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.press_key("g")')
+			if self._spawn_location == 'R':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(0,0))
+			elif self._spawn_location == 'L':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(617,174))
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.left_click()')
+			self.select_worker()
+			if self._spawn_location == 'R':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(0,0))
+			elif self._spawn_location == 'L':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(617,174))
+			self._actions.append('self._window.right_click()')
+			self.select_worker()
+			if self._spawn_location == 'R':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(0,0))
+			elif self._spawn_location == 'L':
+				self._actions.append('self._window.set_cursor_pos({},{})'.format(617,174))
+			
+			self._actions.append('self._window.right_click()')
+			
+			self.built_left_gas = True
+		
+	def build_right_gas(self):
+		pass
+		
+	def rally_overlords(self):
+		if not hasattr(self, 'rallied_ovies'):
+			self._actions.append('self._window.press_key("w")')
+			# Ovie 1
+			if self._spawn_location == 'L':
+				self.box((407,86),(997,863))
+			elif self._spawn_location == 'R':
+				self.box((379,394),(1094,809))
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(692,916))
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.left_click()')
+			self._actions.append('self._window.key_down("SHIFT")')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(90,946))
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.right_click()')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(102,901))
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.right_click()')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.key_up("SHIFT")')
+			self._actions.append('time.sleep(.1)')
+			
+			# OV 2
+			if self._spawn_location == 'L':
+				self.box((407,86),(997,863))
+			elif self._spawn_location == 'R':
+				self.box((379,394),(1094,809))
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(746,913))
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.left_click()')
+			self._actions.append('self._window.key_down("SHIFT")')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(150,996))
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.right_click()')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.set_cursor_pos({},{})'.format(180,987))
+			self._actions.append('self._window.right_click()')
+			self._actions.append('time.sleep(.1)')
+			self._actions.append('self._window.key_up("SHIFT")')
+			
+			self._actions.append('time.sleep(.1)')
+			self.rallied_ovies = True
+			self.hotkey_barracks()
+
+	def _determine_spawn_location(self):
+		pass
+
+	def _get_game_time(self) -> int:
+		sc2_seconds = (time.time() - self._start_time) * self._game_speed_ratio
+		return sc2_seconds
+
+	def _format_game_time(self, game_time: int) -> str:
+		m, s = divmod(game_time, 60)
+		return "{}:{}".format(m,s)	
+
+	def _print(self, message_type: str, message: str) -> None:
+		'''
+		Print messages to the console
+		'''
+		# Get the threading lock
+		if self._debug:
+			print(message_type,":",message)
